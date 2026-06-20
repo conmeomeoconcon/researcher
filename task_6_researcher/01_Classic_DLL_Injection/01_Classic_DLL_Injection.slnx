@@ -4,4 +4,5 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="01_Classic_DLL_Injection/01_Classic_DLL_Injection.vcxproj" Id="46857f4f-4dc7-457f-a8b2-4c026f4fc054" />
+  <Project Path="PandaDLL/PandaDLL.vcxproj" Id="84a43031-0469-457a-bb71-88286515f1f7" />
 </Solution>

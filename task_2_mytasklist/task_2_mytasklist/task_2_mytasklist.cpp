@@ -13,8 +13,9 @@
 
 using namespace std;
 
+// thông số tự cho thôi
 struct TableLayout {
-    const int nameWidth = 40; // Đã chuyển thành 40 theo ý bạn
+    const int nameWidth = 40;
     const int pidWidth = 8;
     const int sessionNameWidth = 16;
     const int sessionIdWidth = 11;
@@ -37,10 +38,6 @@ struct ProcessModel {
 // ==========================================
 // 1. TẦNG TRUY VẤN DỮ LIỆU HỆ THỐNG
 // ==========================================
-
-HANDLE TakeSystemSnapshot() {
-    return CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-}
 
 MemoryResult FetchWorkingSetMemory(DWORD pid) {
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -114,14 +111,11 @@ void PrintHeader(const TableLayout& layout) {
 }
 
 void PrintRow(const ProcessModel& process, const TableLayout& layout) {
-    // Xử lý trực tiếp cắt ngắn tên ngay tại đây thay vì gọi hàm TruncateText
     wstring displayName = process.imageName;
-
-    // Xử lý định dạng bộ nhớ trực tiếp bằng câu lệnh rẽ nhánh if như bạn đề xuất
     wstring memDisplay = L"N/A";
     if (process.memory.isAccessible) {
         wstringstream ss;
-        ss.imbue(locale("en_US.UTF-8")); // Ép stream sử dụng định dạng phân tách hàng nghìn bằng dấu phẩy kiểu Mỹ
+        ss.imbue(locale("en_US.UTF-8"));
         ss << (process.memory.bytes / 1024) << L" K";
         memDisplay = ss.str();
     }
@@ -141,7 +135,7 @@ void RunTasklist() {
     TableLayout layout;
     PrintHeader(layout);
 
-    HANDLE hSnapshot = TakeSystemSnapshot();
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE) return;
 
     PROCESSENTRY32W entry;
