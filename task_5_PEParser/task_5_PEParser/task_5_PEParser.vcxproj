@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{38aafdb3-9ce0-4fec-a8a4-7ae03fe32b5b}</ProjectGuid>
-    <RootNamespace>PEParser</RootNamespace>
+    <ProjectGuid>{04db465a-b1c9-4a4b-80c7-371ee85012ef}</ProjectGuid>
+    <RootNamespace>task5PEParser</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -139,7 +139,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="PEParser.cpp" />
+    <ClCompile Include="task_5_PEParser.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

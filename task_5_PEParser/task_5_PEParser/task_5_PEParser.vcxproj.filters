@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="PEParser.cpp">
+    <ClCompile Include="task_5_PEParser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

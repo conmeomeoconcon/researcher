@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="PEParser/PEParser.vcxproj" />
+  <Project Path="task_5_PEParser/task_5_PEParser.vcxproj" Id="04db465a-b1c9-4a4b-80c7-371ee85012ef" />
 </Solution>

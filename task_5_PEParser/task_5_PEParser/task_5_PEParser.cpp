@@ -5,7 +5,30 @@
 #include <iomanip>
 #include <string>
 #include <filesystem>
+#include <sstream>
 using namespace std;
+
+// ============================================================================
+// CẤU TRÚC DỮ LIỆU
+// ============================================================================
+
+struct PEFileContext {
+    string filePath;
+    ifstream file;
+    IMAGE_DOS_HEADER dosHeader;
+    IMAGE_NT_HEADERS64 ntHeaders;
+    vector<IMAGE_SECTION_HEADER> sections;
+    bool isValid;
+};
+
+struct ImportInfo {
+    string dllName;
+    vector<string> functions;
+};
+
+// ============================================================================
+// HÀM CHUYỂN ĐỔI - RVA TO OFFSET
+// ============================================================================
 
 DWORD RvaToOffset(
     DWORD rva,
@@ -14,322 +37,461 @@ DWORD RvaToOffset(
 {
     for (WORD i = 0; i < numberOfSections; i++)
     {
-        DWORD sectionVA =
-            sections[i].VirtualAddress;
+        DWORD sectionVA = sections[i].VirtualAddress;
+        DWORD sectionSize = sections[i].Misc.VirtualSize;
 
-        DWORD sectionSize =
-            sections[i].Misc.VirtualSize;
-
-        if (rva >= sectionVA &&
-            rva < sectionVA + sectionSize)
+        if (rva >= sectionVA && rva < sectionVA + sectionSize)
         {
-            return rva
-                - sectionVA
-                + sections[i].PointerToRawData;
+            return rva - sectionVA + sections[i].PointerToRawData;
         }
     }
-
     return rva;
 }
+
+// ============================================================================
+// HÀM CHUYỂN ĐỔI - MACHINE TO STRING
+// ============================================================================
 
 const char* MachineToString(WORD machine)
 {
     switch (machine)
     {
-    case IMAGE_FILE_MACHINE_I386:
-        return "x86";
-
-    case IMAGE_FILE_MACHINE_AMD64:
-        return "x64";
-
-    default:
-        return "Unknown";
+    case IMAGE_FILE_MACHINE_I386:   return "x86";
+    case IMAGE_FILE_MACHINE_AMD64:  return "x64";
+    case IMAGE_FILE_MACHINE_IA64:   return "Itanium";
+    case IMAGE_FILE_MACHINE_ARM:    return "ARM";
+    case IMAGE_FILE_MACHINE_ARM64:  return "ARM64";
+    default:                        return "Unknown";
     }
 }
 
-int main(int argc, char* argv[])
+// ============================================================================
+// HÀM TIỆN ÍCH - LẤY TÊN SECTION
+// ============================================================================
+
+string GetSectionName(const IMAGE_SECTION_HEADER& section)
 {
-    if (argc != 2)
+    char name[9] = { 0 };
+    memcpy(name, section.Name, 8);
+    string result(name);
+    while (!result.empty() && result.back() == ' ')
     {
-        cout << "Usage: PEParser.exe <file.exe>\n";
-        return 1;
+        result.pop_back();
     }
+    return result;
+}
 
-    ifstream file(argv[1], ios::binary);
+// ============================================================================
+// HÀM TIỆN ÍCH - ĐỌC STRING TỪ RVA (KHÔNG LƯU VỊ TRÍ)
+// ============================================================================
 
-    if (!file)
+string ReadStringFromRVA_Seek(
+    ifstream& file,
+    DWORD rva,
+    IMAGE_SECTION_HEADER* sections,
+    WORD numberOfSections)
+{
+    DWORD offset = RvaToOffset(rva, sections, numberOfSections);
+
+    file.seekg(offset);
+
+    string result;
+    getline(file, result, '\0');
+
+    return result;
+}
+
+// ============================================================================
+// HÀM IN - SEPARATOR
+// ============================================================================
+
+void PrintSeparator()
+{
+    cout << "============================================================" << endl;
+}
+
+void PrintHeader(const string& title)
+{
+    cout << "\n============================================================\n";
+    cout << "  " << title;
+    cout << "\n============================================================\n";
+}
+
+// ============================================================================
+// HÀM MỞ/ĐÓNG FILE
+// ============================================================================
+
+bool OpenPEFile(PEFileContext& ctx, const char* filePath)
+{
+    ctx.filePath = filePath;
+    ctx.file.open(filePath, ios::binary);
+
+    if (!ctx.file)
     {
         cout << "Cannot open file\n";
-        return 1;
+        return false;
     }
 
-    cout << "\n========== TARGET FILE ==========\n";
+    return true;
+}
 
-    cout << "Full Path : "
-        << argv[1]
-        << endl;
+void ClosePEFile(PEFileContext& ctx)
+{
+    if (ctx.file.is_open())
+    {
+        ctx.file.close();
+    }
+}
 
-    cout << "File Name : "
-        << filesystem::path(argv[1]).filename().string()
-        << endl;
+// ============================================================================
+// HÀM LẤY - ĐỌC DOS HEADER
+// ============================================================================
 
-    // =========================
-    // DOS HEADER
-    // =========================
+bool ReadDOSHeader(PEFileContext& ctx)
+{
+    ctx.file.read(reinterpret_cast<char*>(&ctx.dosHeader), sizeof(ctx.dosHeader));
 
-    IMAGE_DOS_HEADER dosHeader;
-
-    file.read(
-        reinterpret_cast<char*>(&dosHeader),
-        sizeof(dosHeader));
-
-    if (dosHeader.e_magic != IMAGE_DOS_SIGNATURE)
+    if (ctx.dosHeader.e_magic != IMAGE_DOS_SIGNATURE)
     {
         cout << "Invalid DOS Signature\n";
-        return 1;
+        return false;
     }
 
-    cout << "\n========== DOS HEADER ==========\n";
+    return true;
+}
 
-    cout << "e_magic  : 0x"
-        << hex << dosHeader.e_magic
-        << endl;
+// ============================================================================
+// HÀM LẤY - ĐỌC NT HEADERS
+// ============================================================================
 
-    cout << "e_lfanew : 0x"
-        << hex << dosHeader.e_lfanew
-        << endl;
+bool ReadNTHeaders(PEFileContext& ctx)
+{
+    ctx.file.seekg(ctx.dosHeader.e_lfanew);
+    ctx.file.read(reinterpret_cast<char*>(&ctx.ntHeaders), sizeof(ctx.ntHeaders));
 
-    // =========================
-    // NT HEADERS
-    // =========================
-
-    file.seekg(dosHeader.e_lfanew);
-
-    IMAGE_NT_HEADERS64 ntHeaders;
-
-    file.read(
-        reinterpret_cast<char*>(&ntHeaders),
-        sizeof(ntHeaders));
-
-    if (ntHeaders.Signature != IMAGE_NT_SIGNATURE)
+    if (ctx.ntHeaders.Signature != IMAGE_NT_SIGNATURE)
     {
         cout << "Invalid NT Signature\n";
-        return 1;
+        return false;
     }
 
-    cout << "\n========== FILE HEADER ==========\n";
+    return true;
+}
 
-    cout << "Machine          : "
-        << MachineToString(
-            ntHeaders.FileHeader.Machine)
-        << endl;
+// ============================================================================
+// HÀM LẤY - ĐỌC SECTIONS
+// ============================================================================
 
-    cout << "Sections         : "
-        << dec
-        << ntHeaders.FileHeader.NumberOfSections
-        << endl;
+bool ReadSections(PEFileContext& ctx)
+{
+    WORD numberOfSections = ctx.ntHeaders.FileHeader.NumberOfSections;
+    ctx.sections.resize(numberOfSections);
 
-    cout << "TimeDateStamp    : 0x"
-        << hex
-        << ntHeaders.FileHeader.TimeDateStamp
-        << endl;
-
-    cout << "\n========== OPTIONAL HEADER ==========\n";
-
-    cout << "ImageBase        : 0x"
-        << hex
-        << ntHeaders.OptionalHeader.ImageBase
-        << endl;
-
-    cout << "EntryPoint RVA   : 0x"
-        << hex
-        << ntHeaders.OptionalHeader.AddressOfEntryPoint
-        << endl;
-
-    cout << "SizeOfImage      : 0x"
-        << hex
-        << ntHeaders.OptionalHeader.SizeOfImage
-        << endl;
-
-    cout << "SizeOfHeaders    : 0x"
-        << hex
-        << ntHeaders.OptionalHeader.SizeOfHeaders
-        << endl;
-
-    // =========================
-    // SECTION TABLE
-    // =========================
-
-    vector<IMAGE_SECTION_HEADER> sections(
-        ntHeaders.FileHeader.NumberOfSections);
-
-    file.seekg(
-        dosHeader.e_lfanew +
+    DWORD sectionTableOffset =
+        ctx.dosHeader.e_lfanew +
         sizeof(DWORD) +
         sizeof(IMAGE_FILE_HEADER) +
-        ntHeaders.FileHeader.SizeOfOptionalHeader);
+        ctx.ntHeaders.FileHeader.SizeOfOptionalHeader;
 
-    cout << "\n========== SECTIONS ==========\n";
+    ctx.file.seekg(sectionTableOffset);
 
-    for (WORD i = 0;
-        i < ntHeaders.FileHeader.NumberOfSections;
-        i++)
+    for (WORD i = 0; i < numberOfSections; i++)
     {
-        file.read(
-            reinterpret_cast<char*>(&sections[i]),
+        ctx.file.read(
+            reinterpret_cast<char*>(&ctx.sections[i]),
             sizeof(IMAGE_SECTION_HEADER));
-
-        char sectionName[9] = { 0 };
-
-        memcpy(
-            sectionName,
-            sections[i].Name,
-            8);
-
-        cout << "\n[" << i + 1 << "] "
-            << sectionName
-            << endl;
-
-        cout << "VirtualAddress : 0x"
-            << hex
-            << sections[i].VirtualAddress
-            << endl;
-
-        cout << "VirtualSize    : 0x"
-            << hex
-            << sections[i].Misc.VirtualSize
-            << endl;
-
-        cout << "RawDataPtr     : 0x"
-            << hex
-            << sections[i].PointerToRawData
-            << endl;
-
-        cout << "RawDataSize    : 0x"
-            << hex
-            << sections[i].SizeOfRawData
-            << endl;
     }
 
-    // =========================
-    // IMPORT DIRECTORY
-    // =========================
+    return true;
+}
 
-    IMAGE_DATA_DIRECTORY importDir =
-        ntHeaders.OptionalHeader.DataDirectory[
-            IMAGE_DIRECTORY_ENTRY_IMPORT];
+// ============================================================================
+// HÀM LẤY - PARSE TOÀN BỘ PE
+// ============================================================================
 
-    if (importDir.VirtualAddress == 0)
+bool ParsePEFile(PEFileContext& ctx)
+{
+    if (!ReadDOSHeader(ctx))
     {
-        cout << "\nNo Import Table\n";
-        return 0;
+        return false;
     }
 
-    DWORD importOffset =
-        RvaToOffset(
-            importDir.VirtualAddress,
-            sections.data(),
-            ntHeaders.FileHeader.NumberOfSections);
+    if (!ReadNTHeaders(ctx))
+    {
+        return false;
+    }
 
-    file.seekg(importOffset);
+    if (!ReadSections(ctx))
+    {
+        return false;
+    }
 
-    cout << "\n========== IMPORTS ==========\n";
+    ctx.isValid = true;
+    return true;
+}
+
+// ============================================================================
+// HÀM LẤY - LẤY DANH SÁCH HÀM CỦA 1 DLL (LƯU VÀO VECTOR)
+// ============================================================================
+
+void GetImportFunctions(
+    ifstream& file,
+    IMAGE_IMPORT_DESCRIPTOR& importDesc,
+    IMAGE_SECTION_HEADER* sections,
+    WORD numberOfSections,
+    vector<string>& functions)
+{
+    ULONGLONG thunkRva = importDesc.OriginalFirstThunk
+        ? importDesc.OriginalFirstThunk
+        : importDesc.FirstThunk;
+
+    DWORD thunkOffset = RvaToOffset(
+        (DWORD)thunkRva,
+        sections,
+        numberOfSections);
+
+    // Di chuyển đến vị trí thunk
+    file.seekg(thunkOffset);
 
     while (true)
     {
-        IMAGE_IMPORT_DESCRIPTOR importDesc;
+        IMAGE_THUNK_DATA64 thunk;
+        file.read(reinterpret_cast<char*>(&thunk), sizeof(thunk));
 
-        file.read(
-            reinterpret_cast<char*>(&importDesc),
-            sizeof(importDesc));
+        if (thunk.u1.AddressOfData == 0)
+            break;
+
+        if (IMAGE_SNAP_BY_ORDINAL64(thunk.u1.Ordinal))
+        {
+            stringstream ss;
+            ss << "Ordinal: " << IMAGE_ORDINAL64(thunk.u1.Ordinal);
+            functions.push_back(ss.str());
+        }
+        else
+        {
+            DWORD importByNameOffset = RvaToOffset(
+                (DWORD)thunk.u1.AddressOfData,
+                sections,
+                numberOfSections);
+
+            streampos thunkPos = file.tellg();
+            file.seekg(importByNameOffset);
+
+            IMAGE_IMPORT_BY_NAME ibn;
+            file.read(reinterpret_cast<char*>(&ibn.Hint), sizeof(WORD));
+
+            string functionName;
+            getline(file, functionName, '\0');
+
+            functions.push_back(functionName);
+
+            file.seekg(thunkPos);
+        }
+    }
+}
+
+// ============================================================================
+// HÀM LẤY - LẤY TẤT CẢ IMPORTS (LƯU VÀO VECTOR) - ĐÃ SỬA LỖI
+// ============================================================================
+
+void GetAllImports(
+    PEFileContext& ctx,
+    vector<ImportInfo>& imports)
+{
+    IMAGE_DATA_DIRECTORY importDir =
+        ctx.ntHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+
+    if (importDir.VirtualAddress == 0)
+        return;
+
+    DWORD importOffset = RvaToOffset(
+        importDir.VirtualAddress,
+        ctx.sections.data(),
+        ctx.ntHeaders.FileHeader.NumberOfSections);
+
+    ctx.file.seekg(importOffset);
+
+    while (true)
+    {
+        // Đọc import descriptor
+        IMAGE_IMPORT_DESCRIPTOR importDesc;
+        ctx.file.read(reinterpret_cast<char*>(&importDesc), sizeof(importDesc));
 
         if (importDesc.Name == 0)
             break;
 
-        DWORD dllNameOffset =
-            RvaToOffset(
-                importDesc.Name,
-                sections.data(),
-                ntHeaders.FileHeader.NumberOfSections);
+        ImportInfo info;
 
-        streampos currentPos =
-            file.tellg();
+        // LƯU VỊ TRÍ HIỆN TẠI (đầu descriptor)
+        streampos descriptorPos = ctx.file.tellg();
 
-        file.seekg(dllNameOffset);
+        // Đọc tên DLL - hàm này sẽ di chuyển file pointer
+        info.dllName = ReadStringFromRVA_Seek(
+            ctx.file,
+            importDesc.Name,
+            ctx.sections.data(),
+            ctx.ntHeaders.FileHeader.NumberOfSections);
 
-        string dllName;
-        getline(file, dllName, '\0');
+        // QUAY LẠI VỊ TRÍ ĐẦU DESCRIPTOR
+        ctx.file.seekg(descriptorPos);
 
-        cout << "\nDLL: "
-            << dllName
-            << endl;
+        // Đọc các hàm import - hàm này sẽ di chuyển file pointer đến thunk
+        GetImportFunctions(
+            ctx.file,
+            importDesc,
+            ctx.sections.data(),
+            ctx.ntHeaders.FileHeader.NumberOfSections,
+            info.functions);
 
-        ULONGLONG thunkRva =
-            importDesc.OriginalFirstThunk
-            ? importDesc.OriginalFirstThunk
-            : importDesc.FirstThunk;
+        imports.push_back(info);
 
-        DWORD thunkOffset =
-            RvaToOffset(
-                (DWORD)thunkRva,
-                sections.data(),
-                ntHeaders.FileHeader.NumberOfSections);
+        // QUAY LẠI VỊ TRÍ ĐẦU DESCRIPTOR để đọc descriptor tiếp theo
+        ctx.file.seekg(descriptorPos);
+    }
+}
 
-        file.seekg(thunkOffset);
+// ============================================================================
+// HÀM IN - FILE INFO
+// ============================================================================
 
-        while (true)
-        {
-            IMAGE_THUNK_DATA64 thunk;
+void PrintFileInfo(const PEFileContext& ctx)
+{
+    cout << "\n========== TARGET FILE ==========\n";
+    cout << "Full Path : " << ctx.filePath << endl;
+    cout << "File Name : " << filesystem::path(ctx.filePath).filename().string() << endl;
+}
 
-            file.read(
-                reinterpret_cast<char*>(&thunk),
-                sizeof(thunk));
+// ============================================================================
+// HÀM IN - DOS HEADER
+// ============================================================================
 
-            if (thunk.u1.AddressOfData == 0)
-                break;
+void PrintDOSHeader(const PEFileContext& ctx)
+{
+    cout << "\n========== DOS HEADER ==========\n";
+    cout << "e_magic  : 0x" << hex << ctx.dosHeader.e_magic << endl;
+    cout << "e_lfanew : 0x" << hex << ctx.dosHeader.e_lfanew << endl;
+}
 
-            if (IMAGE_SNAP_BY_ORDINAL64(
-                thunk.u1.Ordinal))
-            {
-                cout << "    Ordinal: "
-                    << IMAGE_ORDINAL64(
-                        thunk.u1.Ordinal)
-                    << endl;
-            }
-            else
-            {
-                DWORD importByNameOffset =
-                    RvaToOffset(
-                        (DWORD)thunk.u1.AddressOfData,
-                        sections.data(),
-                        ntHeaders.FileHeader.NumberOfSections);
+// ============================================================================
+// HÀM IN - NT HEADERS
+// ============================================================================
 
-                streampos thunkPos =
-                    file.tellg();
+void PrintNTHeaders(const PEFileContext& ctx)
+{
+    cout << "\n========== FILE HEADER ==========\n";
+    cout << "Machine          : " << MachineToString(ctx.ntHeaders.FileHeader.Machine) << endl;
+    cout << "Sections         : " << dec << ctx.ntHeaders.FileHeader.NumberOfSections << endl;
+    cout << "TimeDateStamp    : 0x" << hex << ctx.ntHeaders.FileHeader.TimeDateStamp << endl;
 
-                file.seekg(importByNameOffset);
+    cout << "\n========== OPTIONAL HEADER ==========\n";
+    cout << "ImageBase        : 0x" << hex << ctx.ntHeaders.OptionalHeader.ImageBase << endl;
+    cout << "EntryPoint RVA   : 0x" << hex << ctx.ntHeaders.OptionalHeader.AddressOfEntryPoint << endl;
+    cout << "SizeOfImage      : 0x" << hex << ctx.ntHeaders.OptionalHeader.SizeOfImage << endl;
+    cout << "SizeOfHeaders    : 0x" << hex << ctx.ntHeaders.OptionalHeader.SizeOfHeaders << endl;
+}
 
-                IMAGE_IMPORT_BY_NAME ibn;
+// ============================================================================
+// HÀM IN - SECTIONS
+// ============================================================================
 
-                file.read(
-                    reinterpret_cast<char*>(&ibn.Hint),
-                    sizeof(WORD));
+void PrintSections(const PEFileContext& ctx)
+{
+    cout << "\n========== SECTIONS ==========\n";
 
-                string functionName;
-                getline(file, functionName, '\0');
+    for (size_t i = 0; i < ctx.sections.size(); i++)
+    {
+        string name = GetSectionName(ctx.sections[i]);
 
-                cout << "    "
-                    << functionName
-                    << endl;
+        cout << "\n[" << dec << (i + 1) << "] " << name << endl;
+        cout << "VirtualAddress : 0x" << hex << ctx.sections[i].VirtualAddress << endl;
+        cout << "VirtualSize    : 0x" << hex << ctx.sections[i].Misc.VirtualSize << endl;
+        cout << "RawDataPtr     : 0x" << hex << ctx.sections[i].PointerToRawData << endl;
+        cout << "RawDataSize    : 0x" << hex << ctx.sections[i].SizeOfRawData << endl;
+    }
+}
 
-                file.seekg(thunkPos);
-            }
-        }
+// ============================================================================
+// HÀM IN - IMPORTS (IN TỪ VECTOR ĐÃ LẤY)
+// ============================================================================
 
-        file.seekg(currentPos);
+void PrintImports(const vector<ImportInfo>& imports)
+{
+    cout << "\n========== IMPORTS ==========\n";
+
+    if (imports.empty())
+    {
+        cout << "\nNo Import Table\n";
+        return;
     }
 
-    file.close();
+    for (size_t i = 0; i < imports.size(); i++)
+    {
+        cout << "\nDLL: " << imports[i].dllName << endl;
+
+        for (size_t j = 0; j < imports[i].functions.size(); j++)
+        {
+            cout << "    " << imports[i].functions[j] << endl;
+        }
+    }
+
+    cout << "\n  Total DLLs imported: " << dec << imports.size() << endl;
+}
+
+// ============================================================================
+// HÀM IN - TOÀN BỘ REPORT
+// ============================================================================
+
+void PrintReport(
+    const PEFileContext& ctx,
+    const vector<ImportInfo>& imports)
+{
+    PrintFileInfo(ctx);
+    PrintDOSHeader(ctx);
+    PrintNTHeaders(ctx);
+    PrintSections(ctx);
+    PrintImports(imports);
+}
+
+// ============================================================================
+// MAIN
+// ============================================================================
+
+int main(int argc, char* argv[])
+{
+    // Kiểm tra tham số
+    if (argc != 2)
+    {
+        cout << "Usage: PEParser.exe <file.exe>\n";
+        cout << "Example: PEParser.exe C:\\Windows\\System32\\notepad.exe\n";
+        return 1;
+    }
+
+    // Khởi tạo context
+    PEFileContext ctx;
+    ctx.isValid = false;
+
+    // BƯỚC 1: Mở file
+    if (!OpenPEFile(ctx, argv[1]))
+    {
+        return 1;
+    }
+
+    // BƯỚC 2: Parse PE
+    if (!ParsePEFile(ctx))
+    {
+        ClosePEFile(ctx);
+        return 1;
+    }
+
+    // BƯỚC 3: Lấy dữ liệu imports
+    vector<ImportInfo> imports;
+    GetAllImports(ctx, imports);
+
+    // BƯỚC 4: In report
+    PrintReport(ctx, imports);
+
+    // BƯỚC 5: Dọn dẹp
+    ClosePEFile(ctx);
 
     return 0;
 }
