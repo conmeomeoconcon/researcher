@@ -291,7 +291,7 @@ void GetImportFunctions(
 }
 
 // ============================================================================
-// HÀM LẤY - LẤY TẤT CẢ IMPORTS (LƯU VÀO VECTOR) - ĐÃ SỬA LỖI
+// HÀM LẤY - LẤY TẤT CẢ IMPORTS (LƯU VÀO VECTOR)
 // ============================================================================
 
 void GetAllImports(

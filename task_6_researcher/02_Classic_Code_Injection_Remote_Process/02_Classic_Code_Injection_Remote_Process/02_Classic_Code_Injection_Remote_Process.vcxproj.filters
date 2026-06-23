@@ -15,15 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="PandaDLL.cpp">
+    <ClCompile Include="02_Classic_Code_Injection_Remote_Process.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="PandaDLL/PandaDLL.vcxproj" Id="14f13a7b-74cb-4661-858f-c680a517b3ee" />
+  <Project Path="04_Classic_Code_Injection_Remote_Process_VP/04_Classic_Code_Injection_Remote_Process_VP.vcxproj" />
 </Solution>

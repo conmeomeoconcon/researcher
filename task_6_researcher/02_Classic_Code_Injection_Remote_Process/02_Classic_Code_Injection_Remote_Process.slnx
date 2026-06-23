@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="02_Classic_Code_Injection_Remote_Process/02_Classic_Code_Injection_Remote_Process.vcxproj" Id="54e82804-d7e2-4c4e-a38d-ef10324e43c6" />
+</Solution>

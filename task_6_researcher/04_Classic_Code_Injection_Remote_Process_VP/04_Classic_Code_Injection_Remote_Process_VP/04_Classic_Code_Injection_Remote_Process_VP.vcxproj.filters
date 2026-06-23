@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="01_Classic_DLL_Injection.cpp">
+    <ClCompile Include="04_Classic_Code_Injection_Remote_Process_VP.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

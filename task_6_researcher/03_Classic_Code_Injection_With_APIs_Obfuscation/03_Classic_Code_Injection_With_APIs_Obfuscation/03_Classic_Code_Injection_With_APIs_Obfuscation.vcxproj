@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{5399ecd3-337f-416c-8262-311b84733624}</ProjectGuid>
-    <RootNamespace>My03ClassicCodeInjectionRemoteProcess</RootNamespace>
+    <ProjectGuid>{4e7e3907-352c-452c-a813-dbfbd7849b14}</ProjectGuid>
+    <RootNamespace>My03ClassicCodeInjectionWithAPIsObfuscation</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -139,7 +139,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="03_Classic_Code_Injection_Remote_Process.cpp" />
+    <ClCompile Include="03_Classic_Code_Injection_With_APIs_Obfuscation.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

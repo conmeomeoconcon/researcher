@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="03_Classic_Code_Injection_Remote_Process.cpp">
+    <ClCompile Include="01_Classic_Code_Injection_Local.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
